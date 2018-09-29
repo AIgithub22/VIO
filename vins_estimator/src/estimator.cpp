@@ -76,7 +76,7 @@ void Estimator::clearState()
 
 void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity)
 {
-    if (!first_imu)
+    if (!first_imu) //first_imu初值flase 所以条件语句在第一个imu数据到来是执行，直接将imu数据赋值给estimator成员 acc_0 gyr_0
     {
         first_imu = true;
         acc_0 = linear_acceleration;
@@ -94,17 +94,17 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
             tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
 
         dt_buf[frame_count].push_back(dt);
-        linear_acceleration_buf[frame_count].push_back(linear_acceleration);
-        angular_velocity_buf[frame_count].push_back(angular_velocity);
+        linear_acceleration_buf[frame_count].push_back(linear_acceleration);//estimator类成员变量 大小window_size+1
+        angular_velocity_buf[frame_count].push_back(angular_velocity);//estimator类成员变量 大小window_size+1
 
-        int j = frame_count;         
+        int j = frame_count; //以下对当前滑动窗口内的类成员变量赋值        
         Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;
         Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - Bgs[j];
-        Rs[j] *= Utility::deltaQ(un_gyr * dt).toRotationMatrix();
+        Rs[j] *= Utility::deltaQ(un_gyr * dt).toRotationMatrix();//estimator类成员变量 大小window_size+1
         Vector3d un_acc_1 = Rs[j] * (linear_acceleration - Bas[j]) - g;
         Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
-        Ps[j] += dt * Vs[j] + 0.5 * dt * dt * un_acc;
-        Vs[j] += dt * un_acc;
+        Ps[j] += dt * Vs[j] + 0.5 * dt * dt * un_acc;//estimator类成员变量 大小window_size+1
+        Vs[j] += dt * un_acc;//estimator类成员变量 大小window_size+1
     }
     acc_0 = linear_acceleration;
     gyr_0 = angular_velocity;
@@ -175,7 +175,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
                 slideWindow();
         }
         else
-            frame_count++;
+            frame_count++;//这里实现了滑动窗口内的计数器功能
     }
     else
     {

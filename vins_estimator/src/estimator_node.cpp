@@ -11,15 +11,15 @@
 #include "estimator.h"
 #include "parameters.h"
 #include "utility/visualization.h"
-///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
+
+
 Estimator estimator;
 
 std::condition_variable con;
 double current_time = -1;
-queue<sensor_msgs::ImuConstPtr> imu_buf;
-queue<sensor_msgs::PointCloudConstPtr> feature_buf;
-queue<sensor_msgs::PointCloudConstPtr> relo_buf;
+queue<sensor_msgs::ImuConstPtr> imu_buf;//imu队列数据结构
+queue<sensor_msgs::PointCloudConstPtr> feature_buf;//图像队列数据结构
+queue<sensor_msgs::PointCloudConstPtr> relo_buf;///存储pose_graph/match_points的队列
 int sum_of_wait = 0;
 
 std::mutex m_buf;
@@ -96,8 +96,8 @@ void update()
 }
 
 std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>>
-getMeasurements()
-{
+getMeasurements()                                          //函数用于读取 imu 数据 和 image 数据并退回给调用程序
+{                                                          //使用了队列数据结构
     std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
 
     while (true)
@@ -106,18 +106,20 @@ getMeasurements()
             return measurements;
 
         if (!(imu_buf.back()->header.stamp.toSec() > feature_buf.front()->header.stamp.toSec() + estimator.td))
-        {
+        {    //back()退回队列的最新数据 front()退回队列的最旧数据
             //ROS_WARN("wait for imu, only should happen at the beginning");
             sum_of_wait++;
             return measurements;
-        }
-
+        }//imu队列中的数据都比feature数据中的数据要早 所以等待imu数据的到来
+        //运行到这一步imu的队尾数据要晚于或等于feature队头的数据
         if (!(imu_buf.front()->header.stamp.toSec() < feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             ROS_WARN("throw img, only should happen at the beginning");
             feature_buf.pop();
             continue;
-        }
+        }//feature队列头的数据时间小于imu队头的数据所以要丢弃feature队头的数据
+
+        
         sensor_msgs::PointCloudConstPtr img_msg = feature_buf.front();
         feature_buf.pop();
 
@@ -132,7 +134,7 @@ getMeasurements()
             ROS_WARN("no imu between two image");
         measurements.emplace_back(IMUs, img_msg);
     }
-    return measurements;
+    return measurements;//退回的数据包涵了两帧之间的imu数据和当前对应的图像。
 }
 
 void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
@@ -173,7 +175,7 @@ void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
     m_buf.lock();
     feature_buf.push(feature_msg);
     m_buf.unlock();
-    con.notify_one();
+    con.notify_one(); ///////////////////通知process()中的con进程运行
 }
 
 void restart_callback(const std_msgs::BoolConstPtr &restart_msg)
@@ -183,9 +185,9 @@ void restart_callback(const std_msgs::BoolConstPtr &restart_msg)
         ROS_WARN("restart the estimator!");
         m_buf.lock();
         while(!feature_buf.empty())
-            feature_buf.pop();
+            feature_buf.pop(); //重启启动estimator清空特征点缓存
         while(!imu_buf.empty())
-            imu_buf.pop();
+            imu_buf.pop();  //重启启动estimator清空imu缓存
         m_buf.unlock();
         m_estimator.lock();
         estimator.clearState();
@@ -212,7 +214,7 @@ void process()
     {
         std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
         std::unique_lock<std::mutex> lk(m_buf);
-        con.wait(lk, [&]
+        con.wait(lk, [&]   //触发信号由feature_callback发出，实现每一个图像出来后更新measurements中的数据
                  {
             return (measurements = getMeasurements()).size() != 0;
                  });
@@ -220,9 +222,9 @@ void process()
         m_estimator.lock();
         for (auto &measurement : measurements)
         {
-            auto img_msg = measurement.second;
+            auto img_msg = measurement.second;//second 即 std::pair<_Ty1, _Ty2>::second 第二个数据 因为这个数据结构中只有一副图
             double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0;
-            for (auto &imu_msg : measurement.first)
+            for (auto &imu_msg : measurement.first)//std::pair<_Ty1, _Ty2>::second 第一个数据 不断给imu_msg循环赋值
             {
                 double t = imu_msg->header.stamp.toSec();
                 double img_t = img_msg->header.stamp.toSec() + estimator.td;
@@ -239,21 +241,21 @@ void process()
                     rx = imu_msg->angular_velocity.x;
                     ry = imu_msg->angular_velocity.y;
                     rz = imu_msg->angular_velocity.z;
-                    estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
+                    estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));//对当前窗口对应的帧进行相关类成员变量赋值
                     //printf("imu: dt:%f a: %f %f %f w: %f %f %f\n",dt, dx, dy, dz, rx, ry, rz);
 
                 }
                 else
                 {
-                    double dt_1 = img_t - current_time;
-                    double dt_2 = t - img_t;
+                    double dt_1 = img_t - current_time;// current_time是上一个imu_msg的时间
+                    double dt_2 = t - img_t;//dt_1 和 dt_2 是 当前帧图像的前一个和后一个imu数据的时间间隔
                     current_time = img_t;
                     ROS_ASSERT(dt_1 >= 0);
                     ROS_ASSERT(dt_2 >= 0);
                     ROS_ASSERT(dt_1 + dt_2 > 0);
                     double w1 = dt_2 / (dt_1 + dt_2);
                     double w2 = dt_1 / (dt_1 + dt_2);
-                    dx = w1 * dx + w2 * imu_msg->linear_acceleration.x;
+                    dx = w1 * dx + w2 * imu_msg->linear_acceleration.x; //相当于和上一个imu数据做了线性一个插值
                     dy = w1 * dy + w2 * imu_msg->linear_acceleration.y;
                     dz = w1 * dz + w2 * imu_msg->linear_acceleration.z;
                     rx = w1 * rx + w2 * imu_msg->angular_velocity.x;
@@ -265,7 +267,7 @@ void process()
             }
             // set relocalization frame
             sensor_msgs::PointCloudConstPtr relo_msg = NULL;
-            while (!relo_buf.empty())
+            while (!relo_buf.empty())//将 relo_buf赋值给 relo_msg 然后清空，也就是 relo_buf只保存当前的帧的匹配点
             {
                 relo_msg = relo_buf.front();
                 relo_buf.pop();
@@ -282,13 +284,13 @@ void process()
                     u_v_id.z() = relo_msg->points[i].z;
                     match_points.push_back(u_v_id);
                 }
-                Vector3d relo_t(relo_msg->channels[0].values[0], relo_msg->channels[0].values[1], relo_msg->channels[0].values[2]);
+                Vector3d relo_t(relo_msg->channels[0].values[0], relo_msg->channels[0].values[1], relo_msg->channels[0].values[2]); //可能是平移矢量
                 Quaterniond relo_q(relo_msg->channels[0].values[3], relo_msg->channels[0].values[4], relo_msg->channels[0].values[5], relo_msg->channels[0].values[6]);
-                Matrix3d relo_r = relo_q.toRotationMatrix();
+                Matrix3d relo_r = relo_q.toRotationMatrix();//可能是旋转矩阵
                 int frame_index;
                 frame_index = relo_msg->channels[0].values[7];
                 estimator.setReloFrame(frame_stamp, frame_index, match_points, relo_t, relo_r);
-            }
+            }//setReloFrame函数的作用有待研究。
 
             ROS_DEBUG("processing vision data with stamp %f \n", img_msg->header.stamp.toSec());
 
@@ -352,7 +354,7 @@ int main(int argc, char **argv)
 
     registerPub(n);
 
-    ros::Subscriber sub_imu = n.subscribe(IMU_TOPIC, 2000, imu_callback, ros::TransportHints().tcpNoDelay());
+    ros::Subscriber sub_imu = n.subscribe(IMU_TOPIC, 2000, imu_callback, ros::TransportHints().tcpNoDelay());//貌似使用了UDP协议来传输imu数据保证实时性
     ros::Subscriber sub_image = n.subscribe("/feature_tracker/feature", 2000, feature_callback);
     ros::Subscriber sub_restart = n.subscribe("/feature_tracker/restart", 2000, restart_callback);
     ros::Subscriber sub_relo_points = n.subscribe("/pose_graph/match_points", 2000, relocalization_callback);
