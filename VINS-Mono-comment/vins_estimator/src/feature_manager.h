@@ -38,10 +38,10 @@ class FeaturePerId
 {
   public:
     const int feature_id;
-    int start_frame;
+    int start_frame;  //feature第一次被观测到的帧
 
-    //！该特征点被关键帧观测到的特征点坐标集合
-    vector<FeaturePerFrame> feature_per_frame;
+    //！该特征点被所有关键帧观测到的坐标集合
+    vector<FeaturePerFrame> feature_per_frame;  //vector 声明了一个集合
 
     int used_num;
     bool is_outlier;
@@ -58,7 +58,7 @@ class FeaturePerId
     {
     }
 
-    int endFrame();
+    int endFrame();//feature最后被观察到的帧
 };
 
 class FeatureManager
@@ -86,8 +86,8 @@ class FeatureManager
     void removeBack();
     void removeFront(int frame_count);
     void removeOutlier();
-    //！滑窗内所有特征点列表
-    list<FeaturePerId> feature;
+
+    list<FeaturePerId> feature;////滑窗内所有特征点列表
     int last_track_num;
 
   private:

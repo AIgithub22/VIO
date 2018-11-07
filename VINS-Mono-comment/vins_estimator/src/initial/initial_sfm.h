@@ -18,7 +18,7 @@ struct SFMFeature
     bool state;
     int id;
     //! <被观测到的关键帧id,特征点坐标>
-    vector<pair<int,Vector2d>> observation;
+    vector<pair<int,Vector2d>> observation;//observation[]
     //! 3D坐标
     double position[3];
     double depth;

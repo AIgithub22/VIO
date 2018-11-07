@@ -1,3 +1,5 @@
+
+/* This class help you to calibrate extrinsic rotation between imu and camera when your totally don't konw the extrinsic parameter */
 #include "initial_ex_rotation.h"
 
 InitialEXRotation::InitialEXRotation(){
@@ -7,7 +9,8 @@ InitialEXRotation::InitialEXRotation(){
     Rimu.push_back(Matrix3d::Identity());
     ric = Matrix3d::Identity();
 }
-
+// corres [匹配点]的数据组织在estimator.cpp corres = f_manager.getCorresponding(i, WINDOW_SIZE);在滑窗中寻找与最新的关键帧共视关系较强的关键帧]
+//！在滑窗内寻找与最新的关键帧共视点超过20(像素点)的关键帧
 /**
  * [InitialEXRotation::CalibrationExRotation 通过一组匹配点和IMU的预积分结果，计算相机与IMU的外参的旋转量
  *                           这部分内容可以参考代码总结中3.1部分，相机与IMU的相对旋转求取

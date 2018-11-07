@@ -148,7 +148,7 @@ vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(int frame_coun
     vector<pair<Vector3d, Vector3d>> corres;
     for (auto &it : feature)
     {
-        //! 保证两帧的id大于当前特征点的起始id小于当前特征点的终止id
+        //! 保证两帧的id大于当前特征点的起始帧id小于当前特征点的终止帧id
         if (it.start_frame <= frame_count_l && it.endFrame() >= frame_count_r)
         {
             Vector3d a = Vector3d::Zero(), b = Vector3d::Zero();
@@ -157,7 +157,7 @@ vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(int frame_coun
 
             a = it.feature_per_frame[idx_l].point;
 
-            b = it.feature_per_frame[idx_r].point;
+            b = it.feature_per_frame[idx_r].point;//如果从L 到 R 中间有某些帧观察不到该特征点 这种情况如何处理
             
             corres.push_back(make_pair(a, b));
         }
@@ -210,8 +210,7 @@ void FeatureManager::clearDepth(const VectorXd &x)
         if (!(it_per_id.used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
             continue;
         it_per_id.estimated_depth = 1.0 / x(++feature_index);
-    }
-}
+
 
 /**
  * [FeatureManager::getDepthVector 读取特征点的逆深度]

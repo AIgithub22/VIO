@@ -41,10 +41,10 @@ void GlobalSFM::triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matr
  * @param  R_initial [description]  位姿，世界到相机坐标系
  * @param  P_initial [description]
  * @param  i         [description]
- * @param  sfm_f     [description]
+ * @param  sfm_f     [description]//储存滑动窗口内的特征点
  * @return           [description]
  */
-bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
+bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,//得到相机的位姿 世界坐标系下
 								vector<SFMFeature> &sfm_f)
 {
 	vector<cv::Point2f> pts_2_vector;
@@ -57,12 +57,12 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 		for (int k = 0; k < (int)sfm_f[j].observation.size(); k++)
 		{
 			//！若该特征点也被第i关键帧观测到，则将其加入序列
-			if (sfm_f[j].observation[k].first == i)
+			if (sfm_f[j].observation[k].first == i)//observation[k].first  同时观测到该特征点的关键帧ID，可以同时被多个关键帧观测到
 			{
-				Vector2d img_pts = sfm_f[j].observation[k].second;
+				Vector2d img_pts = sfm_f[j].observation[k].second;    //像素在第i关键帧中的坐标
 				cv::Point2f pts_2(img_pts(0), img_pts(1));
 				pts_2_vector.push_back(pts_2);
-				cv::Point3f pts_3(sfm_f[j].position[0], sfm_f[j].position[1], sfm_f[j].position[2]);
+				cv::Point3f pts_3(sfm_f[j].position[0], sfm_f[j].position[1], sfm_f[j].position[2]); //特征点三角化后得到的3D坐标
 				pts_3_vector.push_back(pts_3);
 				break;
 			}
@@ -89,7 +89,7 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
 		return false;
 	}
 
-    //! 这里要注意的是PnP求解的结果是将3D点从世界坐标系转到相机坐标系的变换，而我们要求解的相机位姿是相机坐标系到世界坐标系的变换
+    //! 这里要注意的是PnP求解的结果是将3D点从世界坐标系转到相机坐标系的变换，而我们要求解的相机位姿是相机坐标系到世界坐标系的变换XXXXXX错误的理解
 	cv::Rodrigues(rvec, r);
 	//cout << "r " << endl << r << endl;
 	MatrixXd R_pnp;
@@ -110,7 +110,7 @@ bool GlobalSFM::solveFrameByPnP(Matrix3d &R_initial, Vector3d &P_initial, int i,
  * @param Pose1  [位姿2]
  * @param sfm_f  [特征点集合]   求取的点在世界坐标系
  */
-void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Pose0, 
+void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Pose0, //将两帧共同的特征点三角化后得到3D坐标
 									 int frame1, Eigen::Matrix<double, 3, 4> &Pose1,
 									 vector<SFMFeature> &sfm_f)
 {
@@ -143,7 +143,7 @@ void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Po
 		{
 			Vector3d point_3d;
 			triangulatePoint(Pose0, Pose1, point0, point1, point_3d);
-			sfm_f[j].state = true;
+			sfm_f[j].state = true;//三角化成功状态标志
 			sfm_f[j].position[0] = point_3d(0);
 			sfm_f[j].position[1] = point_3d(1);
 			sfm_f[j].position[2] = point_3d(2);
@@ -159,7 +159,7 @@ void GlobalSFM::triangulateTwoFrames(int frame0, Eigen::Matrix<double, 3, 4> &Po
  * @param  q                  [旋转量]
  * @param  T                  [平移量]
  * @param  l                  [共视帧的id]
- * @param  relative_R         now ===> l
+ * @param  relative_R         now ===> L
  * @param  relative_T
  * @param  sfm_f              滑窗内所有的features
  * @param  sfm_tracked_points 三角化得到的points
@@ -181,15 +181,15 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 
     //! 注：now -- frame_num - 1
 
-	//！Step1：将第l帧当做原点，然后将Frame转换到同一坐标系下。
-	//！将第l帧所在位置当做原点 
+	//！Step1：将第L帧当做原点，然后将Frame转换到同一坐标系下。
+	//！将第L帧所在位置当做原点 
 	q[l].w() = 1;
 	q[l].x() = 0;
 	q[l].y() = 0;
 	q[l].z() = 0;
 	T[l].setZero();
 
-	//! 求取 now ==> l 的变换关系(相机位姿)
+	//! 求取 now ==> L的变换关系(相机位姿)
 	q[frame_num - 1] = q[l] * Quaterniond(relative_R);
 	T[frame_num - 1] = relative_T;
 	//cout << "init q_l " << q[l].w() << " " << q[l].vec().transpose() << endl;
@@ -206,10 +206,10 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	double c_translation[frame_num][3];
 	Eigen::Matrix<double, 3, 4> Pose[frame_num];
 
-	//! 求取世界坐标系到第l帧到的位姿
+	//! 求取世界坐标系到第L帧到的位姿
 	c_Quat[l] = q[l].inverse();
 	c_Rotation[l] = c_Quat[l].toRotationMatrix();
-	c_Translation[l] = -1 * (c_Rotation[l] * T[l]);
+	c_Translation[l] = -1 * (c_Rotation[l] * T[l]);//第L帧坐标下的translation
 
 	Pose[l].block<3, 3>(0, 0) = c_Rotation[l];
 	Pose[l].block<3, 1>(0, 3) = c_Translation[l];
@@ -221,19 +221,19 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 	Pose[frame_num - 1].block<3, 3>(0, 0) = c_Rotation[frame_num - 1];
 	Pose[frame_num - 1].block<3, 1>(0, 3) = c_Translation[frame_num - 1];
 
-	//! Step2: 三角化第l frame到第frame_num - 1之间的Features
+	//! Step2: 三角化第L frame到第frame_num - 1之间的Features
 	//1: trangulate between l ----- frame_num - 1
 	//2: solve pnp l + 1; trangulate l + 1 ------- frame_num - 1; 
 	for (int i = l; i < frame_num - 1 ; i++)
 	{	
-		//! Step2.1: 求解第l+1 frame到第frame_num - 2的相机位姿逆
+		//! Step2.1: 求解第L+1 frame到第frame_num - 2的相机位姿逆
 		// solve pnp
 		if (i > l)
 		{
 			Matrix3d R_initial = c_Rotation[i - 1];
 			Vector3d P_initial = c_Translation[i - 1];
 			//！PnP求解第i帧相机位姿的逆
-			if(!solveFrameByPnP(R_initial, P_initial, i, sfm_f))
+			if(!solveFrameByPnP(R_initial, P_initial, i, sfm_f))//L到frame-2 得到第i帧的R T，更新到R_initial P_initial 相对于世界坐标
 				return false;
 			c_Rotation[i] = R_initial;
 			c_Translation[i] = P_initial;
@@ -242,18 +242,18 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 			Pose[i].block<3, 1>(0, 3) = c_Translation[i];
 		}
 
-		//! Step2.2: 三角化第l frame和第frame_num - 1共视的Features
+		//! Step2.2: 三角化第L frame与第frame_num - 1共视的Features
         //! 求取得点在世界坐标系
 		// triangulate point based on the solve pnp result
-		triangulateTwoFrames(i, Pose[i], frame_num - 1, Pose[frame_num - 1], sfm_f);
+		triangulateTwoFrames(i, Pose[i], frame_num - 1, Pose[frame_num - 1], sfm_f);//求从L到frame-1的所有与frame-1共同特征点在世界坐标系
 	}
 
-	//! Step3：三角化第l frame和第frame_num - 2共视的Features
+	//! Step3：三角化第L frame和第frame_num - 2共视的Features
 	//3: triangulate l-----l+1 l+2 ... frame_num -2
 	for (int i = l + 1; i < frame_num - 1; i++)
-		triangulateTwoFrames(l, Pose[l], i, Pose[i], sfm_f);
+		triangulateTwoFrames(l, Pose[l], i, Pose[i], sfm_f);//求解 L到 frame-2中所有与L帧共同的特征点
 
-	//! Step4：三角化第l-1 frame到第1 frame之间的Features
+	//! Step4：三角化第L-1 frame到第1 frame之间的Features
 	//4: solve pnp l-1; triangulate l-1 ----- l
 	//             l-2              l-2 ----- l
 	for (int i = l - 1; i >= 0; i--)
@@ -261,7 +261,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		//solve pnp
 		Matrix3d R_initial = c_Rotation[i + 1];
 		Vector3d P_initial = c_Translation[i + 1];
-		if(!solveFrameByPnP(R_initial, P_initial, i, sfm_f))
+		if(!solveFrameByPnP(R_initial, P_initial, i, sfm_f))//L到0帧 得到第i帧的R T，更新到R_initial P_initial 相对于世界坐标
 			return false;
 		c_Rotation[i] = R_initial;
 		c_Translation[i] = P_initial;
@@ -269,7 +269,7 @@ bool GlobalSFM::construct(int frame_num, Quaterniond* q, Vector3d* T, int l,
 		Pose[i].block<3, 3>(0, 0) = c_Rotation[i];
 		Pose[i].block<3, 1>(0, 3) = c_Translation[i];
 		//triangulate
-		triangulateTwoFrames(i, Pose[i], l, Pose[l], sfm_f);
+		triangulateTwoFrames(i, Pose[i], l, Pose[l], sfm_f); //pose[i]帧的R_T增广矩阵   ,三角化第L-1帧到第1帧之间的与L公共的特征点
 	}
 
 	//! Step5：三角化其他没有恢复的满足共视点大于2的Features
