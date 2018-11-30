@@ -4,7 +4,7 @@ Eigen::Matrix2d ProjectionFactor::sqrt_info;
 double ProjectionFactor::sum_t;
 
 /**
- * 利用参考文献[1]中算法1，计算切平面上的两个正交基地
+ * 利用参考文献[1]中算法1，计算切平面上的两个正交基
  * if a!= [1,0,0]
  *     b1 = a×[1,0,0]
  * else 

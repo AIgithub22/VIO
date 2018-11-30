@@ -27,8 +27,8 @@ bool InitialEXRotation::CalibrationExRotation(vector<pair<Vector3d, Vector3d>> c
     frame_count++;
 
     //! Step2:计算两帧之间的旋转矩阵
-    Rc.push_back(solveRelativeR(corres));
-    Rimu.push_back(delta_q_imu.toRotationMatrix());
+    Rc.push_back(solveRelativeR(corres));//纯摄像头的转动矩阵
+    Rimu.push_back(delta_q_imu.toRotationMatrix());//纯IMU的转动矩阵
     Rc_g.push_back(ric.inverse() * delta_q_imu * ric);
 
     Eigen::MatrixXd A(frame_count * 4, 4);

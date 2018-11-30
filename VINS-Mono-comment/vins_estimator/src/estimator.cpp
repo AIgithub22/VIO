@@ -848,7 +848,7 @@ void Estimator::optimization()
     }
     relocalize = false;
 
-    //！Step2.3:添加视觉的residual
+
     //！添加闭环校正时候的状态量和残差
     //loop close factor
     if(LOOP_CLOSURE)

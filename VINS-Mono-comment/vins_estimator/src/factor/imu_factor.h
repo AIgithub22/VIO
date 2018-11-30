@@ -102,7 +102,7 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
             //！雅克比矩阵的秩和costfunction中参数块的大小是一致的
             //！J[i] 是一个大小为CostFunction::num_residuals_ x CostFunction::parameter_block_sizes_的向量
             //！详细参考：http://ceres-solver.org/nnls_modeling.html?highlight=set_num_residuals#_CPPv2N5ceres12CostFunction8EvaluateEPPCdPdPPd
-            //！求取[p_k,q_k]的雅克比
+            //对IMU测量残差求取[p_k,q_k]的雅克比
             if (jacobians[0])
             {
                 //！将jacobians[0]重新写为15*7的矩阵

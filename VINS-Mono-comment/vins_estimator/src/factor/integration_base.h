@@ -114,7 +114,7 @@ class IntegrationBase
             Vector3d a_1_x = _acc_1 - linearized_ba;
             Matrix3d R_w_x, R_a_0_x, R_a_1_x;
 
-            R_w_x<<0, -w_x(2), w_x(1),
+            R_w_x<<0, -w_x(2), w_x(1), // w_x的反对称矩阵
                 w_x(2), 0, -w_x(0),
                 -w_x(1), w_x(0), 0;
             R_a_0_x<<0, -a_0_x(2), a_0_x(1),
@@ -123,7 +123,9 @@ class IntegrationBase
             R_a_1_x<<0, -a_1_x(2), a_1_x(1),
                 a_1_x(2), 0, -a_1_x(0),
                 -a_1_x(1), a_1_x(0), 0;
-
+//fixed-size block expression:matrix.block<p,q>(i,j);      Block of size (p,q), starting at (i,j);	
+//fixed-size version will typically give you faster code
+//离散状态下在计算协方差矩阵的时候为：P' = FPF' + GQG'  参考文献公式（15）以及附录10.3
             MatrixXd F = MatrixXd::Zero(15, 15);
             F.block<3, 3>(0, 0) = Matrix3d::Identity();
             F.block<3, 3>(0, 3) = -0.25 * delta_q.toRotationMatrix() * R_a_0_x * _dt * _dt + 
@@ -158,7 +160,7 @@ class IntegrationBase
 
             //step_jacobian = F;
             //step_V = V;
-            jacobian = F * jacobian;
+            jacobian = F * jacobian;    //参考文献公式（16） （17）
             covariance = F * covariance * F.transpose() + V * noise * V.transpose(); 
         }
 
@@ -188,14 +190,14 @@ class IntegrationBase
 
         //checkJacobian(_dt, acc_0, gyr_0, acc_1, gyr_1, delta_p, delta_q, delta_v,
         //                    linearized_ba, linearized_bg);
-        delta_p = result_delta_p;
+        delta_p = result_delta_p;//预积分的结果保存更新到当前值
         delta_q = result_delta_q;
         delta_v = result_delta_v;
         linearized_ba = result_linearized_ba;
         linearized_bg = result_linearized_bg;
         delta_q.normalize();
         sum_dt += dt;
-        acc_0 = acc_1;
+        acc_0 = acc_1;//预积分的结果保存更新到当前值
         gyr_0 = gyr_1;  
      
     }
@@ -211,25 +213,29 @@ class IntegrationBase
     {
         Eigen::Matrix<double, 15, 1> residuals;
 
-        //! 对应参考文献[1]中的公式(12),求取α，β，θ的一阶近似
+        // 对应文献中的公式(11),求取α，β，γ的一阶近似
         //! (3,9) 
         Eigen::Matrix3d dp_dba = jacobian.block<3, 3>(O_P, O_BA);
         Eigen::Matrix3d dp_dbg = jacobian.block<3, 3>(O_P, O_BG);
 
         Eigen::Matrix3d dq_dbg = jacobian.block<3, 3>(O_R, O_BG);
 
-        Eigen::Matrix3d dv_dba = jacobian.block<3, 3>(O_V, O_BA);
+        Eigen::Matrix3d dv_dba = jacobian.block<3, 3>(O_V, O_BA);//速度V关于ba增量的偏导
         Eigen::Matrix3d dv_dbg = jacobian.block<3, 3>(O_V, O_BG);
 
-        Eigen::Vector3d dba = Bai - linearized_ba;
+        Eigen::Vector3d dba = Bai - linearized_ba;//连续两次预积分的bias的增量
         Eigen::Vector3d dbg = Bgi - linearized_bg;
 
-        Eigen::Quaterniond corrected_delta_q = delta_q * Utility::deltaQ(dq_dbg * dbg);
+        Eigen::Quaterniond corrected_delta_q = delta_q * Utility::deltaQ(dq_dbg * dbg);   //imu测量模型一阶近似的值 参考论文公式（11）
         Eigen::Vector3d corrected_delta_v = delta_v + dv_dba * dba + dv_dbg * dbg;
         Eigen::Vector3d corrected_delta_p = delta_p + dp_dba * dba + dp_dbg * dbg;
-
-        //! 求取近似之后的残差，对应参考文献[1]中的公式(22)，IMU Model
-        residuals.block<3, 1>(O_P, 0) = Qi.inverse() * (0.5 * G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt) - corrected_delta_p;
+ //    * @param _acc_1               [本次加速度值]
+ //    * @param delta_p              [上次的预积分结果，初始值为0]
+ //    * @param linearized_bg        [上次的预积分的陀螺仪bias]
+ //    * @param result_delta_p       [本次的预积分结果]  
+ //    * @param result_linearized_ba [本次的预积分的加速度bias]
+        //求取近似之后的残差，文献中的公式(21)，   Qi从世界坐标系到Bk帧坐标的转动矩阵 i代表Bk  j代表Bk+1 
+        residuals.block<3, 1>(O_P, 0) = Qi.inverse() * (0.5 * G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt) - corrected_delta_p;//公式中是-dlta_p,这里的corrected_delta_p是一阶近似的结果
         residuals.block<3, 1>(O_R, 0) = 2 * (corrected_delta_q.inverse() * (Qi.inverse() * Qj)).vec();
         residuals.block<3, 1>(O_V, 0) = Qi.inverse() * (G * sum_dt + Vj - Vi) - corrected_delta_v;
         residuals.block<3, 1>(O_BA, 0) = Baj - Bai;
@@ -248,9 +254,13 @@ class IntegrationBase
     Eigen::Matrix<double, 15, 15> step_jacobian;
     Eigen::Matrix<double, 15, 18> step_V;
     Eigen::Matrix<double, 18, 18> noise;
-
+ //    * @param _acc_1               [本次加速度值]
+ //    * @param delta_p              [上次的预积分结果，初始值为0]
+ //    * @param linearized_bg        [上次的预积分的陀螺仪bias]
+ //    * @param result_delta_p       [本次的预积分结果]  
+ //    * @param result_linearized_ba [本次的预积分的加速度bias]
     double sum_dt;
-    Eigen::Vector3d delta_p;
+    Eigen::Vector3d delta_p; //上一次迭代的result_delta_p的值
     Eigen::Quaterniond delta_q;
     Eigen::Vector3d delta_v;
 
