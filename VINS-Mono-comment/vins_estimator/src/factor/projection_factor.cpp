@@ -45,31 +45,31 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
     Eigen::Vector3d Pj(parameters[1][0], parameters[1][1], parameters[1][2]);
     Eigen::Quaterniond Qj(parameters[1][6], parameters[1][3], parameters[1][4], parameters[1][5]);
 
-    Eigen::Vector3d tic(parameters[2][0], parameters[2][1], parameters[2][2]);
-    Eigen::Quaterniond qic(parameters[2][6], parameters[2][3], parameters[2][4], parameters[2][5]);
+    Eigen::Vector3d tic(parameters[2][0], parameters[2][1], parameters[2][2]);    // tic代表imu与camera的transfer
+    Eigen::Quaterniond qic(parameters[2][6], parameters[2][3], parameters[2][4], parameters[2][5]); //qic代表 imu与 camera的选对转动四元数q
 
     double inv_dep_i = parameters[3][0];
 
-    //！将第i frame下的3D点转到第j frame坐标系下
-    //！转到归一化平面，得到归一化平面上点P
-    Eigen::Vector3d pts_camera_i = pts_i / inv_dep_i;
+    //将第i frame下的3D点转到第j frame坐标系下
+    
+    Eigen::Vector3d pts_camera_i = pts_i / inv_dep_i; //pts_i是类成员变量 pts_camera_i是camera坐标系下的坐标 还原逆深度
     //! P'=Rcb''(Rj''(Ri(Rcb P+t_i)-t_j)-t_cb)
-    Eigen::Vector3d pts_imu_i = qic * pts_camera_i + tic;
-    Eigen::Vector3d pts_w = Qi * pts_imu_i + Pi;
-    Eigen::Vector3d pts_imu_j = Qj.inverse() * (pts_w - Pj);
+    Eigen::Vector3d pts_imu_i = qic * pts_camera_i + tic;// pts_imu_i 代表从camera坐标系转换到imu坐标系
+    Eigen::Vector3d pts_w = Qi * pts_imu_i + Pi;   //将i-frame从imu坐标转换到 世界坐标系pts_w   Qi pi 为第i-frame相机坐标系关于世界坐标系的转动Qi和平移Pi
+    Eigen::Vector3d pts_imu_j = Qj.inverse() * (pts_w - Pj);  //从i-frame转换到 j-frame坐标系
     Eigen::Vector3d pts_camera_j = qic.inverse() * (pts_imu_j - tic);
     Eigen::Map<Eigen::Vector2d> residual(residuals);
 
-    //！求取切平面上的误差
+    //求取切平面上的残差
 #ifdef UNIT_SPHERE_ERROR 
     residual =  tangent_base * (pts_camera_j.normalized() - pts_j.normalized());
-    //！求取普通的误差
+   
 #else
     double dep_j = pts_camera_j.z();
-    residual = (pts_camera_j / dep_j).head<2>() - pts_j.head<2>();
+    residual = (pts_camera_j / dep_j).head<2>() - pts_j.head<2>(); //求取普通的残差
 #endif
 
-    residual = sqrt_info * residual;
+    residual = sqrt_info * residual; //mahalanobis距离的关系需要乘上sqrt_info 
 
     //! 因为残差是2， 四个参数快对应的雅克比矩阵分别是：2*7， 2*7, 2*7， 2*1
     if (jacobians)
@@ -97,7 +97,7 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
 #endif
         reduce = sqrt_info * reduce;
 
-        //! 对[Pi,Ri]求偏导
+        //对[Pi,Ri]求偏导  参考解析文档公式（28）
         if (jacobians[0])
         {
             Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);
@@ -110,7 +110,7 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
             jacobian_pose_i.rightCols<1>().setZero();
         }
 
-        //! 对[Pi+1,Ri+1]求偏导
+        // 对[Pj,Rj]求偏导
         if (jacobians[1])
         {
             Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor>> jacobian_pose_j(jacobians[1]);
@@ -136,7 +136,7 @@ bool ProjectionFactor::Evaluate(double const *const *parameters, double *residua
             jacobian_ex_pose.rightCols<1>().setZero();
         }
 
-        //! 对[Pi+1,Ri+1]求偏导
+        //对逆深度求偏导
         if (jacobians[3])
         {
             Eigen::Map<Eigen::Vector2d> jacobian_feature(jacobians[3]);
